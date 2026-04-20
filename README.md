@@ -1,196 +1,210 @@
 # ROAR E2E Playwright Tests
 
-End-to-end Playwright tests for the **ROAR** (Real Operator Assisted Routing) voice calling feature in the [bolt](https://github.com/realtechsupport/bolt) real estate transaction management platform.
+End-to-end Playwright tests for the **ROAR** (Real Operator Assisted Routing) voice calling feature in the bolt real estate transaction platform.
 
 ---
 
-## What Is ROAR?
+## Quick Start — Interactive Runner
 
-ROAR is the voice calling system that connects agents with their broker team. It handles:
+The fastest way to run tests. A CLI will ask you which environment, which agent/broker, and which scenario:
 
-- **Voice calls** between agents and broker team
-- **Call transcription** and speaker identification
-- **Office hours / Out-of-office** routing
-- **SMS dial-number** delivery
+**macOS / Linux (bash):**
+```bash
+bash scripts/run-roar-tests.sh
+```
 
-When the `BETTER_CALL_FLOWS` feature flag is **ON** (default on team2), clicking "Call Broker Team" routes through **NeoLeo Broker Support** — an AI-assisted panel that collects the agent's question before connecting them to a broker. When the flag is **OFF**, the old ROAR modal (`CallModal`) opens directly.
+**Any platform (Node.js):**
+```bash
+node scripts/run-roar-tests.js
+```
+
+The runner will prompt you step by step:
+
+```
+========================================
+     ROAR E2E Interactive Runner
+========================================
+
+Which environment?
+  1) team1  — https://bolt.team1realbrokerage.com
+  2) team2  — https://bolt.team2realbrokerage.com
+  3) local  — http://localhost:3003
+  4) custom — enter your own URL
+Select [1-4]: 2
+  → https://bolt.team2realbrokerage.com
+
+Who is making the call?
+  1) Agent  → calls Broker Team  (from transaction page)
+  2) Broker → calls Agent        (on a transaction)
+Select [1-2]: 1
+  → Agent flow
+
+Which agent?
+  1) US Agent
+  2) CA Agent
+  3) Both
+Select [1-3]: 3
+  → Both personas
+
+Which scenario?
+  1) Opens broker support panel (panel renders + intro text)
+  2) Full flow: submit question + connect with broker
+  3) Both scenarios
+Select [1-3]: 2
+  → Full flow: submit + connect
+
+Run mode?
+  1) Headless  (fast, no browser window)
+  2) Headed    (opens browser — good for debugging)
+Select [1-2]: 2
+  → Headed
+```
 
 ---
 
-## Test Scenarios Covered
+## Manual Commands
 
-| Scenario | Persona | Environment |
+```bash
+# All ROAR tests on team2
+npx playwright test playwright/aa_roar/ --config playwright.team2.config.ts --reporter=list
+
+# Agent → Broker, US Agent only, headed
+npx playwright test playwright/aa_roar/agent/call-broker-team-from-transaction.spec.ts \
+  --config playwright.team2.config.ts \
+  --grep "as Us Agent" \
+  --headed
+
+# Broker → Agent, CA Broker, full call flow
+npx playwright test playwright/aa_roar/broker/call-agent.spec.ts \
+  --config playwright.team2.config.ts \
+  --grep "as Ca Broker.*call agent"
+
+# Filter by tag
+npx playwright test --config playwright.team2.config.ts --grep @roar
+```
+
+---
+
+## Setup
+
+### 1. Install dependencies
+```bash
+nvm use
+yarn install
+```
+
+### 2. Configure environment
+```bash
+# For team2:
+cp .env.team2.example .env.team2
+# Edit .env.team2 with real API base URLs
+
+# For team1:
+cp .env.team1.example .env.team1
+
+# For local:
+cp .env.local.example .env
+```
+
+### 3. Auth setup (run once per environment)
+```bash
+# Creates auth storage states (login sessions for each persona)
+npx playwright test playwright/loggedin.setup.ts --config playwright.team2.config.ts
+```
+
+### 4. Run tests
+```bash
+bash scripts/run-roar-tests.sh
+```
+
+---
+
+## Test Coverage
+
+| Direction | Persona | Scenario | File |
+|---|---|---|---|
+| Agent → Broker | US Agent, CA Agent | Opens broker support panel | `aa_roar/agent/call-broker-team-from-transaction.spec.ts` |
+| Agent → Broker | US Agent, CA Agent | Submit question + connect with broker | `aa_roar/agent/call-broker-team-from-transaction.spec.ts` |
+| Broker → Agent | US Broker, CA Broker | Call agent from transaction + SMS | `aa_roar/broker/call-agent.spec.ts` |
+
+---
+
+## How the Flows Work
+
+### Agent → Broker Team (BETTER_CALL_FLOWS=ON)
+```
+Transaction Page → "Call Broker Team"
+  → NeoLeo panel opens (Leo AI, BETTER_CALL_FLOWS flag ON)
+  → Transaction auto-selected (selector hidden)
+  → Agent types question → Submit
+  → Leo responds → "Connect with Broker" button
+  → Broker details shown (name, phone number)
+```
+
+### Broker → Agent
+```
+Transaction Page → participant list
+  → Select agent from sidebar
+  → POST /api/v1/voice/calls
+  → virtualNumber + callCode shown
+  → Optional: "Text Me This Number" SMS
+```
+
+---
+
+## Environment Quick Reference
+
+| Environment | URL | Config File | Notes |
+|---|---|---|---|
+| team1 | `bolt.team1realbrokerage.com` | `playwright.team1.config.ts` | Stable QA |
+| team2 | `bolt.team2realbrokerage.com` | `playwright.team2.config.ts` | Active dev, BETTER_CALL_FLOWS=ON |
+| local | `localhost:3003` | `playwright.config.ts` | Requires `yarn start:test` |
+
+---
+
+## Known Issues
+
+See [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) for full details.
+
+| Issue | Environment | Fix |
 |---|---|---|
-| Opens broker support panel with transaction pre-selected | US Agent, CA Agent | team2 |
-| Submits a broker question from transaction page | US Agent, CA Agent | team2 |
-
-### Flow Under Test
-
-```
-Transaction Detail Page
-  └─ Click "Call Broker Team"
-       └─ NeoLeo panel opens (BETTER_CALL_FLOWS=ON)
-            └─ Transaction auto-selected (no selector shown)
-            └─ Agent types question → Submit
-            └─ Click "Connect with Broker"
-                 └─ Broker details div visible
-                 └─ Broker name badge visible
-                 └─ Broker phone number visible
-```
+| `CreateTransactionTask` 400 error | team2 | Bootstrap fallback: fetch existing `OPEN` transaction |
+| Ketch banner blocks `page.goto` | team2 CA Agent | Use `{ timeout: 60000 }` on `page.goto` |
+| `WAIT_APIS.createCalls` never fires | team2 | Use `leoChatSessionCreate` instead (BETTER_CALL_FLOWS=ON) |
+| `transactionSelectorLabel` not visible | All | Hidden on transaction pages — do not assert it |
 
 ---
 
-## Repo Structure
+## Project Structure
 
 ```
 .
-├── README.md
+├── scripts/
+│   ├── run-roar-tests.sh          # Interactive runner (macOS/Linux)
+│   └── run-roar-tests.js          # Interactive runner (Node.js, cross-platform)
+├── config/
+│   └── environments.json          # All env/persona/test file configurations
 ├── docs/
-│   ├── ARCHITECTURE.md        # Runner pattern, page objects, bootstrap tasks
-│   ├── KNOWN_ISSUES.md        # team2 known environment issues
-│   └── ROAR_FEATURE.md        # Deep-dive on ROAR & NeoLeo flow
-└── playwright/
-    ├── pages/
-    │   ├── CallModal.ts                      # Page object: old ROAR modal (BETTER_CALL_FLOWS=OFF)
-    │   └── shared/
-    │       └── NeoLeoBrokerSupport.ts         # Page object: NeoLeo broker support panel
-    └── aa_roar/
-        └── agent/
-            └── call-broker-team-from-transaction.spec.ts  # Main test spec
+│   ├── ARCHITECTURE.md            # Runner pattern, page objects, BaseTask
+│   ├── KNOWN_ISSUES.md            # team2 environment quirks
+│   └── ROAR_FEATURE.md            # Feature deep-dive, API reference
+├── playwright/
+│   ├── pages/
+│   │   ├── CallModal.ts                      # Old ROAR modal (BETTER_CALL_FLOWS=OFF)
+│   │   └── shared/
+│   │       └── NeoLeoBrokerSupport.ts        # NeoLeo broker support panel
+│   └── aa_roar/
+│       ├── agent/
+│       │   └── call-broker-team-from-transaction.spec.ts
+│       └── broker/
+│           └── call-agent.spec.ts
+├── .env.team1.example
+├── .env.team2.example
+└── .env.local.example
 ```
 
 ---
 
-## Running the Tests
+## Architecture
 
-### Prerequisites
-
-1. Clone the bolt project and install dependencies:
-   ```bash
-   nvm use
-   yarn install
-   cp .env.example .env
-   ```
-
-2. Ensure you have valid auth storage states (run auth setup once):
-   ```bash
-   npx playwright test playwright/loggedin.setup.ts
-   ```
-
-### Run ROAR Tests
-
-```bash
-# Run all ROAR tests (headless)
-npx playwright test playwright/aa_roar/agent/call-broker-team-from-transaction.spec.ts --reporter=list
-
-# Run with browser visible (headed mode)
-npx playwright test playwright/aa_roar/agent/call-broker-team-from-transaction.spec.ts --headed
-
-# Run a single test by name
-npx playwright test playwright/aa_roar/agent/call-broker-team-from-transaction.spec.ts -g "opens broker support panel"
-
-# Run by tag
-npx playwright test --grep @roar
-```
-
-### Target Environment
-
-Tests run against **team2**: `https://bolt.team2realbrokerage.com`
-
-Configure the base URL in `playwright/config/environments.ts`.
-
----
-
-## Key Implementation Decisions
-
-### 1. BETTER_CALL_FLOWS Feature Flag
-
-On team2, the `BETTER_CALL_FLOWS` feature flag is **ON** by default. This means:
-
-- `POST /api/v1/voice/calls` is **never called** when the agent clicks "Call Broker Team"
-- Instead, a Leo chat session is created: `POST /api/v1/leo/chat/sessions`
-- The test waits for `WAIT_APIS.leoChatSessionCreate` instead of `WAIT_APIS.createCalls`
-
-If you are testing the old ROAR modal (flag OFF), use `CallModal.ts` page object and `WAIT_APIS.createCalls`.
-
-### 2. Bootstrap Fallback for team2
-
-The `CreateTransactionTask` fails on team2 with:
-```
-400 "Error while building checklists for transaction"
-```
-
-This is a known backend environment issue (checklist builder broken for team2). The bootstrap handles this gracefully:
-
-```typescript
-try {
-  const transaction = await new CreateTransactionTask(accessToken).run();
-  // use fresh transaction
-} catch {
-  // Fall back to first existing OPEN transaction
-  const { transactions } = await transactionService
-    .getTransactionsByStateGroupPaginated(userId, 'OPEN', 0, 1);
-}
-```
-
-> **Note**: The response field is `transactions` (not `results`). This is defined in `PagedTransactionResponse` in `src/openapi/arrakis/api.ts`.
-
-### 3. Ketch Privacy Banner Timeout Fix
-
-On team2, the Ketch consent management banner can delay the page `load` event by 30–50 seconds for some agent personas (CA Agent specifically). The fix is to increase the `page.goto` timeout to 60 seconds:
-
-```typescript
-await page.goto(`/transactions/${transactionId}`, { timeout: 60000 });
-```
-
-This is sufficient because the page content (transaction banner address) loads quickly; it's only the Ketch third-party script that's slow.
-
-### 4. Transaction Pre-Selection
-
-When the broker support panel is opened **from a transaction detail page**, the transaction is automatically pre-selected. This means:
-
-- The transaction selector dropdown is **hidden** (not shown to the agent)
-- The `transactionSelectorLabel` locator will NOT be visible
-- Only the question textarea is shown
-
-Do **not** assert `transactionSelectorLabel` visibility in transaction-page tests.
-
----
-
-## API Reference
-
-| API | When Fired | WAIT_APIS key |
-|---|---|---|
-| `POST /api/v1/leo/chat/sessions` | Agent clicks "Call Broker Team" (BETTER_CALL_FLOWS=ON) | `leoChatSessionCreate` |
-| `POST /api/v1/voice/calls` | Agent clicks "Call Broker Team" (BETTER_CALL_FLOWS=OFF) | `createCalls` |
-| `GET /api/v1/leo/chat/*/stream` | After question submitted | `leoChatStream` |
-| `GET /api/v1/voice/calls/*/sms-dial-number` | SMS text me flow | `roarSmsDialNumber` |
-
----
-
-## Page Objects
-
-### `NeoLeoBrokerSupport`
-
-Covers the NeoLeo broker support panel (BETTER_CALL_FLOWS=ON).
-
-Key methods:
-- `waitForBrokerSupportPanel()` — waits for panel and question textarea
-- `submitBrokerQuestion(question)` — fills question, waits for Leo stream API
-- `connectWithBroker()` — clicks connect button, waits for broker details
-- `selectTransaction(address)` — selects a transaction by address (non-transaction pages)
-
-### `CallModal`
-
-Covers the old direct ROAR call modal (BETTER_CALL_FLOWS=OFF, or future regression tests).
-
-Key methods:
-- `waitForCallModalForm()` — waits for modal form
-- `waitForModalVisible()` / `waitForModalHidden()`
-- `clickTextMeThisNumberWithSMS()` — triggers SMS dial API
-
----
-
-## Contributing
-
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for patterns to follow when adding new tests.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for patterns: Runner builder, Page Objects, BaseTask, web-first assertions.

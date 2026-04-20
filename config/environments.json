@@ -1,0 +1,57 @@
+{
+  "environments": {
+    "team1": {
+      "label": "Team 1",
+      "baseURL": "https://bolt.team1realbrokerage.com",
+      "playwrightConfig": "playwright.team1.config.ts",
+      "notes": "Stable QA environment. CreateTransactionTask usually works here."
+    },
+    "team2": {
+      "label": "Team 2",
+      "baseURL": "https://bolt.team2realbrokerage.com",
+      "playwrightConfig": "playwright.team2.config.ts",
+      "notes": "Active dev environment. CreateTransactionTask may fail (checklist builder issue). Bootstrap fallback fetches existing OPEN transactions. Ketch privacy banner delays page load — use timeout:60000 on page.goto.",
+      "featureFlags": {
+        "BETTER_CALL_FLOWS": true,
+        "notes": "When ON, 'Call Broker Team' opens NeoLeo panel instead of old ROAR modal. Wait for leoChatSessionCreate instead of createCalls."
+      }
+    },
+    "local": {
+      "label": "Local",
+      "baseURL": "http://localhost:3003",
+      "playwrightConfig": "playwright.config.ts",
+      "notes": "Requires bolt running locally: yarn start:test"
+    }
+  },
+  "personas": {
+    "usAgent": {
+      "label": "US Agent",
+      "runnerMethod": "asUSAgent()",
+      "country": "UNITED_STATES",
+      "grepPattern": "as Us Agent"
+    },
+    "caAgent": {
+      "label": "CA Agent",
+      "runnerMethod": "asCAAgent()",
+      "country": "CANADA",
+      "grepPattern": "as Ca Agent"
+    },
+    "usBroker": {
+      "label": "US Broker",
+      "runnerMethod": "asUSBroker()",
+      "country": "UNITED_STATES",
+      "grepPattern": "as Us Broker"
+    },
+    "caBroker": {
+      "label": "CA Broker",
+      "runnerMethod": "asCABroker()",
+      "country": "CANADA",
+      "grepPattern": "as Ca Broker"
+    }
+  },
+  "testFiles": {
+    "agentCallsBroker": "playwright/aa_roar/agent/call-broker-team-from-transaction.spec.ts",
+    "brokerCallsAgent": "playwright/aa_roar/broker/call-agent.spec.ts",
+    "officeHours": "playwright/aa_roar/broker/office-hours.spec.ts"
+  }
+}
