@@ -9,6 +9,10 @@ import { WAIT_APIS } from '../../utils/WaitUtils';
  * NeoLeoBrokerSupport — the AI-assisted broker support panel.
  * Opens when BETTER_CALL_FLOWS feature flag is ON.
  * Entry points: transaction detail page, agent inbox.
+ *
+ * IMPORTANT: call `await brokerSupport.setupClipboardAndSMS()` before
+ * `page.goto()` in any test that exercises SMS or clipboard functionality.
+ * It cannot be called from the constructor because it is async.
  */
 export class NeoLeoBrokerSupport {
   protected page: Page;
@@ -59,8 +63,6 @@ export class NeoLeoBrokerSupport {
   constructor(page: Page) {
     this.page = page;
     this.neoLeoPanel = new NeoLeoPanel(page);
-
-    this.setupClipboardAndSMS();
 
     // Intro
     this.introBeforeConnectText = page.getByTestId('broker-support-intro-before');
@@ -193,7 +195,11 @@ export class NeoLeoBrokerSupport {
     );
   }
 
-  /** Clears SMS opt-in state and mocks clipboard for clean test runs */
+  /**
+   * Clears SMS opt-in state and mocks clipboard for clean test runs.
+   * Must be called with `await` before `page.goto()` in any test that
+   * exercises SMS or clipboard functionality.
+   */
   async setupClipboardAndSMS() {
     await this.page.addInitScript(() => {
       localStorage.removeItem('sms_opted_in');

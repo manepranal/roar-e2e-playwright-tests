@@ -68,6 +68,9 @@ Runner.builder<BootstrapData>()
       const transactionPage = new TransactionPage(page);
       const brokerSupport = new NeoLeoBrokerSupport(page);
 
+      // Must be awaited before page.goto so the init script is registered first
+      await brokerSupport.setupClipboardAndSMS();
+
       // 60s timeout: Ketch consent banner on team2 can delay the load event
       await page.goto(`/transactions/${bootstrapData?.transactionId!}`, {
         timeout: 60000,
@@ -92,6 +95,9 @@ Runner.builder<BootstrapData>()
     }) => {
       const transactionPage = new TransactionPage(page);
       const brokerSupport = new NeoLeoBrokerSupport(page);
+
+      // Must be awaited before page.goto so the init script is registered first
+      await brokerSupport.setupClipboardAndSMS();
 
       // 60s timeout: Ketch consent banner on team2 can delay the load event
       await page.goto(`/transactions/${bootstrapData?.transactionId!}`, {
